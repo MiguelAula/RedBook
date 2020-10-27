@@ -139,13 +139,10 @@ object Exercise_5_streaming {
      * should be non-strict in its argument.
      */
     def map[B](f: A => B): Stream[B] = {
-      def loop(s: Stream[A], acc: Stream[B]): Stream[B] =
-        s match {
-          case Empty => acc.reverse
-          case Cons(x, xs) => loop(xs(), Cons[B](() => f(x()), () => acc))
-        }
-
-      loop(this, Empty)
+      this match {
+        case Empty => Empty
+        case Cons(h, t) => Cons(() => f(h()),() => t().map(f))
+      }
     }
 
     def mapFoldRight[B](f: A => B): Stream[B] = this.foldRight(Empty: Stream[B])((x, zs) => Cons(() => f(x), () => zs))
@@ -173,15 +170,10 @@ object Exercise_5_streaming {
       }
       )
 
-    /**
-     * ???? Aquesta era la meva def original de ::: . Aquesta def inverteix l'ordre de les 2 llistes però no veig el motiu
-     */
-    //def :::[B >: A] (that: Stream[B]): Stream[B] = this.foldRight(that)((x,zs) => Cons(() => x,() => zs))
-
     def :::[B >: A](that: Stream[B]): Stream[B] = that.foldRight(this: Stream[B])((x, zs) => Cons(() => x, () => zs))
 
     /**
-     * ???? COM FAIG UNA CORRECTA DEFINICIÓ DE FLATTEN? Voldria dir-li que A es realment Stream[B]
+     * ???? COM FAIG UNA CORRECTA DEFINICIÓ DE FLATTEN? Voldria dir-li que A es realment Stream[B] (mirar implicit classes)
      */
     //def flatten[B]: Stream[B] = this.foldRight(Empty: Stream[B])((xs,zs) => xs ::: zs)
 
@@ -232,27 +224,27 @@ object Exercise_5_streaming {
      */
     def tails: Stream[Stream[A]] =
       Stream.unfold(this) {
-        case Empty => None
         case s@Cons(_, tail) => Some(s, tail())
+        case Empty => None
       }.append(Stream())
 
-    /** ???? no usa intermediate results D: mejorable
+    /** ???? no usa intermediate results D: mejorable (intentar no usant unfold)
      * EXERCISE 5.16
      * Hard: Generalize tails to the function scanRight , which is like a foldRight that
      * returns a stream of the intermediate results. For example:
      * scala> Stream(1,2,3).scanRight(0)(_ + _).toList
      * res0: List[Int] = List(6,5,3,0)
-     * This example should be equivalent to the expression List(1+2+3+0, 2+3+0, 3+0,0) .
+     * This example should be equivalent to the expression List(1+2+3+0, 2+3+0, 3+0,0) . List(1+5,2+3,3,0)
      * Your function should reuse intermediate results so that traversing a Stream with n
      * elements always takes time linear in n . Can it be implemented using unfold ? How, or
      * why not? Could it be implemented using another function we’ve written?
      */
     def scanRight[B](z: B)(f: (A, => B) => B): Stream[B] =
       Stream.unfold(this) {
-        case Empty => None
         case s@Cons(x, tail) =>
           val next = s.foldRight(z)(f)
           Some(next, tail())
+        case Empty => None
       }.append(z)
   }
 
@@ -343,12 +335,11 @@ object Exercise_5_streaming {
     /**
      * ???? el redbook me dice que defina este "ones" (p.94) pero el compilador peta por forward reference
      */
-    /*
-    val ones: Stream[Int] = Stream.cons(1, ones)
+    lazy val ones: Stream[Int] = Stream.cons(1, ones)
     println(ones.map(_ + 1).exists(_ % 2 == 0))
     println(ones.takeWhile(_ == 1))
     println(ones.forAll(_ != 1))
-    */
+
 
     assert(Stream.fibs.take(7).toList == List(0,1,1,2,3,5,8))
     assert(Stream.constant(3).take(5).toList == List(3,3,3,3,3))

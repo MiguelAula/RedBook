@@ -85,7 +85,7 @@ object exercise_3 {
       return 0.0 if it encounters a 0.0 ? Why or why not? Consider how any short-circuiting
       might work if you call foldRight with a large list. This is a deeper question that we’ll
       return to in chapter 5.*/
-    def foldRightShortCircuit[A,B](as: List[A], z: B)(f: (A, B) => B)(sf: A => Boolean): B = //le puedo poner default value a sf??
+    def foldRightShortCircuit[A,B](as: List[A], z: B)(f: (A, B) => B)(sf: A => Boolean): B =
       as match {
         case Nil => z
         case Cons(x, xs) => if (!sf(x)) f(x, foldRightShortCircuit(xs, z)(f)(sf)) else z
