@@ -3,30 +3,54 @@ package RedBook
 import RedBook.PropImplementation.{Gen, Prop}
 import RedBook.PropImplementation.Prop._
 
-import scala.language.implicitConversions
-
 import scala.util.matching.Regex
-
+/*
 object ParserCombinators {
 
-  trait Parsers[ParseError,Parser[+_]] { self =>
-    def run[A](p: Parser[A])(input: String): Either[ParseError,A]
-    def unit[A](a: A): Parser[A]
-    def error(s: String): ParseError
-    def char(c: Char): Parser[Char]
-    def or[A](s1: Parser[A], s2: Parser[A]): Parser[A]
+  type ParseError = String
+  type Parser[+A] = String => Either[ParseError,A]
+
+  trait Parsers { self =>
+    def run[A](p: Parser[A])(input: String): Either[ParseError,A] = p(input)
+    def char(c: Char): Parser[Char] = s => {
+      val firstChar = s.toCharArray.headOption
+      firstChar match {
+        case Some(ch) => if (ch == c) Right(c) else Left(s"Expected '$c', found '$s'")
+        case None => Left(s"Expected '$c', found empty string")
+      }
+    }
+    private def combineErrors(err1: ParseError, err2: ParseError): ParseError = s"$err1\n$err2"
+    def or[A](s1: Parser[A], s2: Parser[A]): Parser[A] = input =>
+      run(s1)(input) match {
+        case Left(err1) => run(s2)(input) match {
+          case Left(err2) => Left(combineErrors(err1,err2))
+          case x => x
+        }
+        case x => x
+      }
     def map2[A,B,C](s1: Parser[A],s2: Parser[B])(f: (A,B) => C): Parser[C] = s1.flatMap(a => s2.map(b => f(a,b)))
-    def map[A,B](p: Parser[A])(f: A => B): Parser[B] = p.flatMap(a => unit(f(a)))
-    def flatMap[A,B](p: Parser[A])(f: A => Parser[B]): Parser[B]
-    def sequence[A](l: List[Parser[A]]): Parser[List[A]] =
-      l.foldLeft(unit(List(): List[A]))((acc,p) => map2(acc,p)((l,pr) => pr :: l))
+    def map[A,B](p: Parser[A])(f: A => B): Parser[B] = input =>
+      run(p)(input) match {
+        case Right(v) => Right(f(v))
+        case Left(err) => Left(err)
+      }
+    def flatMap[A,B](p: Parser[A])(f: A => Parser[B]): Parser[B] = input =>
+      run(p)(input) match {
+        case Right(v) => run(f(v))(input)
+        case Left(err) => Left(err)
+      }
+    def sequence[A](l: List[Parser[A]]): Parser[List[A]] = s =>
+      l.foldLeft(_: Parser[List[A]])((pAcc,pa) => pAcc.map2(pa))
+
     def listOfN[A](n: Int, p: Parser[A]): Parser[List[A]]
 
-    implicit def string(s: String): Parser[String]
+    implicit def string(s: String): Parser[String] = _ => Right(s)
+    //implicit def any[A](x: A): Parser[A]
     implicit def operators[A](p: Parser[A]): ParserOps[A] = ParserOps[A](p)
     implicit def asStringParser[A](a: A)(implicit f: A => Parser[String]): ParserOps[String] = ParserOps(f(a))
 
     case class ParserOps[A](p: Parser[A]) {
+      //def run(s: String): Either[ParseError, A] = self.run(p)(s)
       def |[B>:A](p2: Parser[B]): Parser[B] = self.or(p,p2)
       def or[B>:A](p2: => Parser[B]): Parser[B] = self.or(p,p2)
       def map[B](f: A => B): Parser[B] = self.map(p)(f)
@@ -40,10 +64,11 @@ object ParserCombinators {
      * parser results in 2 ; given "" or "b123" (a string not starting with 'a' ), it results
      * in 0 ; and so on.
      */
-    def occurrences(regex: Regex): Parser[Int]
+    def occurrences(regex: Regex): Parser[Int] = Parser(s => {
+      Right((regex findAllIn s).length)
+    })
     def charOccurrences(c: Char): Parser[Int] = occurrences(s"$c*".r)
     def charOccurrencesAtStart(c: Char): Parser[Int] = occurrences(s"^$c*".r)
-    val aOccs = occurrences("^a".r)
 
     /**
      * A Parser[Int] that recognizes one or more 'a' characters, and whose result
@@ -53,15 +78,23 @@ object ParserCombinators {
      * would you like to handle error reporting in this case? Could the API support giv-
      * ing an explicit message like "Expected one or more 'a'" in the case of failure?
      */
-    def occurrencesOrError(regex: Regex): Parser[Int] = occurrences(regex).flatMap(n => if (n > 0) unit(n) else ???)
+    def occurrencesOrError(regex: Regex): Parser[Int] = occurrences(regex).flatMap(n =>
+      Parser(_ =>
+        if (n == 0) Left(s"Expected one or more occurrences matching '$regex'") else Right(n)
+      )
+    )
 
     /**
      * A parser that recognizes zero or more 'a' , followed by one or more 'b' , and
      * which results in the pair of counts of characters seen. For instance, given "bbb" ,
      * we get (0,3) , given "aaaab" , we get (4,1) , and so on.
      */
-    def occurrenceList(regexList: List[Regex]): Parser[List[Int]]
-    def charOccurrenceList(chList: List[Char]): Parser[List[Int]]
+    def occurrenceList(regexList: List[Regex]): Parser[List[Int]] = Parser(s =>
+      regexList.map(regex =>
+        run(occurrences(regex))(s)
+      )
+    )
+    def charOccurrenceList(chList: List[Char]): Parser[List[Int]] = ???
 
   }
   /*
@@ -73,3 +106,4 @@ object ParserCombinators {
   }
   */
 }
+*/

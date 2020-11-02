@@ -4,10 +4,8 @@ import java.util.concurrent.{ExecutorService, Executors}
 
 import RedBook.Parallelism.Par
 import RedBook.Parallelism.Par.equal
+import RedBook.PropImplementation.{Gen, Prop}
 import RedBook.functional_RNG.SimpleRNG
-import RedBook.PropImplementation.Gen
-import RedBook.PropImplementation.Prop
-import RedBookTest.testingGen.rng
 
 import scala.annotation.tailrec
 

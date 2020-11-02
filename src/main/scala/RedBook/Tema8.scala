@@ -7,7 +7,6 @@ package RedBook
 import java.util.concurrent.{ExecutorService, Executors}
 
 import RedBook.Parallelism.Par
-import RedBook.Parallelism.Par.equal
 import RedBook.functionalState._
 import RedBook.functional_RNG._
 
@@ -42,7 +41,7 @@ object PropImplementation {
       SGen(forSize2)
     }
   }
-  case class Gen[+A](sample: State[RNG,A]) {
+  case class Gen[+A: Conjunt](sample: State[RNG,A]) {
     def map[B](f: A => B): Gen[B] = Gen(this.sample.map(a => f(a)))
 
     /**
@@ -60,6 +59,19 @@ object PropImplementation {
     */
     def unsized: SGen[A] = SGen { _ => this }
 
+    def exhaustive: Option[Finite[A]] = implicitly[Conjunt[A]] match {
+      case infinite: Infinite[A] => None
+      case finite: Finite[A] => Some(finite)
+    }
+
+    def fullStream: Option[Finite[A]] = implicitly[Conjunt[A]] match {
+      case infinite: Infinite[A] => None
+      case finite: Finite[A] => Some(finite)
+    }
+
+    def randomStream(rng: RNG): LazyList[A] = LazyList.unfold(rng)(rng => Some(this.sample.run(rng)))
+
+    @deprecated
     def listOfAll: Option[List[A]] = {
       val sample = this.sample.run(SimpleRNG(0))._1
       sample match {
@@ -84,7 +96,7 @@ object PropImplementation {
   }
   /** To enable a ** b as patternmatching for Gen*/
   object ** {
-    def unapply[A,B](p: (A,B)) = Some(p)
+    def unapply[A,B](p: (A,B)): Option[(A, B)] = Some(p)
   }
 
   object Gen {
@@ -103,7 +115,7 @@ object PropImplementation {
      * ates values from each Gen with probability proportional to its weight.
      */
     def weighted[A](g1: (Gen[A],Double), g2: (Gen[A],Double)): Gen[A] = {
-      Gen(State(RNG.double)) flatMap (i =>
+      Gen(State(RNG.double)) flatMap (_ =>
         (g1,g2) match {
           case ((aGen,aWeight),(bGen,bWeight)) =>
             val aLimit = aWeight.abs / (aWeight.abs + bWeight.abs)
@@ -230,31 +242,58 @@ object PropImplementation {
      * to test. If a property forAll(p) passes for both p(true) and p(false) , then it is
      * proved. Some domains (like Boolean and Byte ) are so small that they can be exhaus-
      * tively checked. And with sized generators, even infinite domains can be exhaustively
-     * Property-based testing
      * checked up to the maximum size. Automated testing is very useful, but it’s even better
      * if we can automatically prove our code correct. Modify our library to incorporate this kind
      * of exhaustive checking of finite domains and sized generators. This is less of an exer-
      * cise and more of an extensive, open-ended design project.
      */
     def forAll[A](as: Gen[A])(f: A => Boolean): Prop = Prop {
-      (_,n,rng) =>
-        val (valSequence,successCase) = as.listOfAll match {
-          case Some(l) => (l.zipWithIndex,Proved)
-          case None => (randomStream(as)(rng).zip(Stream.from(0)).take(n),Passed)
+      (_, n, rng) => {
+        val (valueStream, successCase) = as.exhaustive match {
+          case Some(finite) =>
+            if (finite.size <= n) (finite.stream, Proved)
+            /*
+            Note: if we are not gonna be exhaustive (else and None cases), we do not use the valueStream
+            since that one takes elements incrementally and not randomly. We use randomStream instead
+            */
+            else (as.randomStream(rng), Passed)
+          case None => (as.randomStream(rng), Passed)
         }
-        valSequence.map {
+        valueStream.zip(LazyList.from(0)).take(n).map {
           case (a, i) => try {
             if (f(a)) successCase else Falsified(a.toString, i)
-          } catch { case e: Exception => Falsified(buildMsg(a, e), i) }
+          } catch {
+            case e: Exception => Falsified(buildMsg(a, e), i)
+          }
         }.find(_.isFalsified).getOrElse(successCase)
+      }
     }
+
+    /*
+    def forAll[A](as: Gen[A])(f: A => Boolean): Prop = {
+      def randomStream(g: Gen[A])(rng: RNG): Stream[A] =
+        Stream.unfold(rng)(rng => Some(g.sample.run(rng)))
+      Prop {
+        (_,n,rng) =>
+          val (valSequence,successCase) = as.listOfAll match {
+            case Some(l) => (l.zipWithIndex,Proved)
+            case None => (randomStream(as)(rng).zip(Stream.from(0)).take(n),Passed)
+          }
+          valSequence.map {
+            case (a, i) => try {
+              if (f(a)) successCase else Falsified(a.toString, i)
+            } catch { case e: Exception => Falsified(buildMsg(a, e), i) }
+          }.find(_.isFalsified).getOrElse(successCase)
+      }
+    }
+     */
 
     def forAll[A](g: SGen[A])(f: A => Boolean): Prop = forAll(g(_))(f)
     def forAll[A](g: Int => Gen[A])(f: A => Boolean): Prop = Prop {
       (max,n,rng) =>
         val casesPerSize = (n + (max - 1)) / max
-        val props: Stream[Prop] =
-          Stream.from(0).take((n min max) + 1).map(i => forAll(g(i))(f))
+        val props: LazyList[Prop] =
+          LazyList.from(0).take((n min max) + 1).map(i => forAll(g(i))(f))
         val prop: Prop =
           props.map(p => Prop { (max, _, rng) =>
             p.run(max, casesPerSize, rng)
@@ -262,15 +301,14 @@ object PropImplementation {
         prop.run(max,n,rng)
     }
 
-    def randomStream[A](g: Gen[A])(rng: RNG): Stream[A] =
-      Stream.unfold(rng)(rng => Some(g.sample.run(rng)))
+
 
     def buildMsg[A](s: A, e: Exception): String =
       s"test case: $s\n" +
       s"generated an exception: ${e.getMessage}\n" +
       s"stack trace:\n ${e.getStackTrace.mkString("\n")}"
 
-    val S = Gen.weighted(
+    val S: Gen[ExecutorService] = Gen.weighted(
       Gen.choose(1,4).map(Executors.newFixedThreadPool) -> .75,
       Gen.unit(Executors.newCachedThreadPool) -> .25)
     def forAllPar[A](g: Gen[A])(f: A => Par[Boolean]): Prop =
@@ -279,6 +317,34 @@ object PropImplementation {
       val result = Par.map(p)(b => if (b) Proved else Falsified("()",0))
       S.map(ES => Par.run(ES)(result).get).sample.run(SimpleRNG(System.currentTimeMillis()))._1
     }
+  }
+}
+
+
+sealed trait Conjunt[+A]
+
+trait Infinite[+A] extends Conjunt[A]
+
+/*
+???? vam dir que millor un Option de pair que 2 options que son both None or both Some. Makes sense.
+Pero fent-ho així perdo els noms de les variables (ara tinc ._1 ._2) i, potser aquí no gaire pero en altres casos, podria ser confús...
+hi ha algún workaround txulo per evitar això? Aquí he fet getters...
+ */
+trait Finite[+A] extends Conjunt[A] {
+  def stream: LazyList[A]
+  def size: Int
+}
+trait AnyConjunt {
+  implicit def anyFinite[A]: Conjunt[A] = new Infinite[A]{}
+}
+object Conjunt extends AnyConjunt {
+  implicit val booleanFinite: Conjunt[Boolean] = new Finite[Boolean] {
+    override def stream: LazyList[Boolean] = LazyList(true,false)
+    override def size: Int = 2
+  }
+  implicit val byteFinite: Conjunt[Byte] = new Finite[Byte] {
+    override def stream: LazyList[Byte] = LazyList.range(Byte.MinValue,Byte.MaxValue)
+    override def size: Int = 256
   }
 }
 

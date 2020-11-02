@@ -30,16 +30,6 @@ object Exercise_4_either {
     try Right(a)
     catch { case e: Exception => Left(e) }
   */
-  /**
-   * ????
-   * El redbook me daba el código de arriba (p.82) pero el compilador se queja por los tipos! He tenido que usar este de abajo, pero este da un warning...
-   */
-
-  def Try[A,B <: Exception](a: => A): Either[B, A] =
-    try Right(a)
-    catch { case e: B => Left(e) }
-
-
 
   /**Implement sequence and traverse for Either . These should return the first error
     that’s encountered, if there is one.*/

@@ -75,7 +75,7 @@ object functional_RNG {
       repeated n times.
      */
     def sequence[A](fs: List[Rand[A]]): Rand[List[A]] =
-      fs.foldLeft( (rng => (Nil: List[A],rng)): Rand[List[A]] )((acc,rand) => map2(rand,acc)((a,b) => a :: b))
+      fs.foldLeft( unit(List(): List[A]) )((acc,rand) => map2(rand,acc)((a,b) => a :: b))
 
     def intsSequence(count: Int): Rand[List[Int]] = sequence(List.fill(count)(int))
 

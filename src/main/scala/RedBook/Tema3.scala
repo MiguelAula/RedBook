@@ -125,6 +125,7 @@ object exercise_3 {
     def zipWith[A,B](l1: List[A],l2: List[A])(f: (A,A) => B): List[B] = (l1,l2) match {
       case (Nil,Nil) => Nil
       case (Cons(x,xs),Cons(y,ys)) => Cons(f(x,y),zipWith(xs,ys)(f))
+      case _ => ???
     }
 
     def flatten[A](l: List[List[A]]): List[A] =
